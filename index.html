@@ -19,12 +19,12 @@
   <style type="text/tailwindcss">
     body {
       margin: 0;
-      padding-top: env(safe-area-inset-top);
-      padding-right: env(safe-area-inset-right);
-      padding-bottom: env(safe-area-inset-bottom);
-      padding-left: env(safe-area-inset-left);
-      min-height: 100vh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+              env(safe-area-inset-bottom) env(safe-area-inset-left);
+      height: 100vh;
+      height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
       box-sizing: border-box;
+      overflow: hidden;
     }
   </style>
 </head>
@@ -34,7 +34,7 @@
   <!-- ======================
             LOGIN SCREEN     
        ====================== -->
-  <div id="login-screen" class="min-h-[100vh] flex items-center justify-center px-4">
+  <div id="login-screen" class="flex items-center justify-center px-4">
     <div class="w-full max-w-sm bg-white rounded-xl shadow-lg p-6 space-y-6">
       <h1 class="text-3xl font-semibold text-center text-gray-900">Ascension<br>Aftercare Login</h1>
 
