@@ -89,7 +89,7 @@ export function createUserCard(user) {
     }],
     onEdit: () => openEditUserModal(user),
     onDelete: async () => {
-      if (!confirm(`Are you sure you want to permanently delete ${user.name}? This cannot be undone.`)) return;
+      if (!confirm(`Are you sure you want to permanently delete ${user.first_name} ${user.last_name}? This cannot be undone.`)) return;
       const { error } = await deleteRecords('users', { id: user.id });
       if (!error) await loadUsersCards();
     },
