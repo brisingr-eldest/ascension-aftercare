@@ -1,0 +1,8 @@
+{
+  "name": "Ascension Aftercare Check In and Check Out",
+  "short_name": "ALS Aftercare",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#059669"
+}
