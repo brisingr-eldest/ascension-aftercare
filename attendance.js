@@ -1,367 +1,284 @@
-// attendance.js
-// Handles attendance logs: recording, querying, rendering, CSV export, and bulk cleanup.
+import { insertAttendanceLogs, fetchAttendanceLogs, deleteAttendanceLogs } from './api.js';
+import { UI_CLASSES } from './ui.js';
+import { els } from './dom.js';
 
-import { insertRecords, selectRecords, deleteRecords } from './api.js';
-import { $, el, els } from './dom.js';
-import { UI_CLASSES } from './config.js';
-import { listFilters, applyFiltersAndSort } from './filters.js';
-import { state } from './state.js';
-
-const feedContainer = $('attendance-container');
-let currentRenderedLogs = [];
-let _deleteListenerAttached = false;
-
-/** ============================
-       Core API
-============================ */
-export const attendanceAPI = {
-  /** Log a student in/out */
-  async log(studentId, action, performedBy) {
-    if (!['in', 'out'].includes(action)) throw new Error(`Invalid action: ${action}`);
-    const record = {
-      student_id: studentId,
-      action,
-      performed_by: performedBy,
-      timestamp: new Date().toISOString()
-    };
-    const { data, error } = await insertRecords('attendance_logs', [record]);
-    if (error) throw error;
-    return data?.[0] ?? null;
-  },
-
-  /** Retrieve attendance logs optionally filtered by studentId and date range */
-  async getLogs({ studentId = null, startDate = null, endDate = null } = {}) {
-    const { data: rows = [], error } = await selectRecords('attendance_logs', {
-      selectFields: 'id, student_id, action, timestamp, performed_by',
-      filters: studentId ? { student_id: studentId } : {}
-    });
-    if (error) return { data: [], error };
-
-    const filtered = rows.filter(r => {
-      if (!r.timestamp) return false;
-      const utcDate = new Date(r.timestamp).toISOString().slice(0, 10);
-      if (startDate && utcDate < startDate) return false;
-      if (endDate && utcDate > endDate) return false;
-      return true;
-    });
-
-    filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    return { data: filtered, error: null };
-  },
-
-  /** Delete a single log */
-  async deleteLog(logId) {
-    if (!logId) throw new Error("Missing logId");
-    const { error } = await deleteRecords('attendance_logs', { id: logId });
-    if (error) throw error;
-    return true;
-  },
-
-  /** Delete all logs before a specific date (YYYY-MM-DD) */
-  async deleteLogsBefore(dateStr) {
-    if (!dateStr) throw new Error("Missing cutoff date");
-    const cutoffIso = `${dateStr}T23:59:59Z`;
-    const { error } = await deleteRecords('attendance_logs', {
-      timestamp: { op: 'lt', value: cutoffIso }
-    });
-    if (error) throw error;
-    return true;
-  }
-};
-
-/** ============================
-       Rendering
-============================ */
-
-/** Render attendance logs to the feed container */
-export async function renderAttendanceFeed() {
-  if (!feedContainer) return;
-
-  // Read filters from UI
-  const search = $('attendance-search')?.value.trim().toLowerCase() || '';
-  const startDate = $('attendance-start-date')?.value || null;
-  const endDate = $('attendance-end-date')?.value || null;
-  const action = $('attendance-action')?.value || null;
-
-  listFilters.attendance.search = search;
-  listFilters.attendance.startDate = startDate;
-  listFilters.attendance.endDate = endDate;
-  listFilters.attendance.action = action;
-
-  const { data: logs = [] } = await attendanceAPI.getLogs({ startDate, endDate });
-
-  if (!logs.length) {
-    feedContainer.innerHTML = '<div class="text-gray-500">No attendance logs found.</div>';
+/**
+ * Call this on page load to wire controls and perform initial fetch.
+ * loadAndRenderAttendanceLogs is intentionally separate and exported.
+ */
+export function initAttendance() {
+  if (!els.attendanceContainer) {
+    console.warn('Attendance logs container not found (#attendance-logs-container)');
     return;
   }
 
-  state.studentById ||= {};
-  state.userById ||= {};
+  // wire controls
+  const reload = () => loadAndRenderAttendanceLogs({
+    sort: els.attendanceSort ? els.attendanceSort.value : undefined,
+    start: els.attendanceStart && els.attendanceStart.value ? els.attendanceStart.value : null,
+    end: els.attendanceEnd && els.attendanceEnd.value ? els.attendanceEnd.value : null,
+    container: els.attendanceContainer
+  });
 
-  // which student ids are missing from state?
-  const missingStudentIds = [...new Set(
-    logs.map(l => l.student_id).filter(id => id && !state.studentById[id])
-  )];
-  if (missingStudentIds.length) {
-    const { data: students = [] } = await selectRecords('students', {
-      selectFields: 'id, first_name, last_name, grade, checked_in',
-      filters: { id: missingStudentIds }   // arrays -> .in(...) via your applyFilters
+  if (els.attendanceSort) els.attendanceSort.addEventListener('change', reload);
+  if (els.attendanceStart) els.attendanceStart.addEventListener('change', reload);
+  if (els.attendanceEnd) els.attendanceEnd.addEventListener('change', reload);
+
+  if (els.attendanceDownload) {
+    els.attendanceDownload.addEventListener('click', async () => {
+      // fetch whatever is currently visible (same query as reload) and download CSV
+      const sort = els.attendanceSort ? els.attendanceSort.value : 'timestamp-desc';
+      const start = els.attendanceStart && els.attendanceStart.value ? els.attendanceStart.value : null;
+      const end = els.attendanceEnd && els.attendanceEnd.value ? els.attendanceEnd.value : null;
+      const logs = await fetchAttendanceLogs({
+        columns: '*, students(first_name,last_name), users(first_name,last_name)',
+        start,
+        end,
+        sort
+      });
+      downloadCSV(logs || []);
     });
-    students.forEach(s => { state.studentById[s.id] = s; });
   }
 
-  // which performer ids are missing from state?
-  const missingUserIds = [...new Set(
-    logs.map(l => l.performed_by).filter(id => id && !state.userById[id])
-  )];
-  if (missingUserIds.length) {
-    const { data: users = [] } = await selectRecords('users', {
-      selectFields: 'id, first_name, last_name',
-      filters: { id: missingUserIds }
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && els.attendanceDangerZone) {
+      els.attendanceDangerZone.classList.remove('hidden');
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (!e.altKey && els.attendanceDangerZone) {
+      els.attendanceDangerZone.classList.add('hidden');
+    }
+  });
+
+  window.addEventListener('blur', () => {
+    els.attendanceDangerZone.classList.add('hidden');
+  });
+
+  // Delete logs handler
+  if (els.attendanceDeleteButton) {
+    els.attendanceDeleteButton.addEventListener('click', async () => {
+      // Step 1: Offer download
+      const downloadFirst = confirm("Would you like to download the logs before deleting?");
+      if (downloadFirst) {
+        const logs = await fetchAttendanceLogs({
+          columns: '*, students(first_name,last_name), users(first_name,last_name)',
+          sort: 'timestamp-asc' // oldest → newest
+        });
+        downloadCSV(logs || []);
+      }
+
+      // Step 2: Confirm destructive action
+      const confirmDelete = confirm(
+        "Are you sure you want to delete ALL attendance logs?\n\n⚠️ This cannot be undone."
+      );
+      if (!confirmDelete) return;
+
+      try {
+        await deleteAttendanceLogs();
+        alert("All logs deleted successfully.");
+        reload();
+      } catch (err) {
+        console.error(err);
+        alert("Failed to delete logs.");
+      }
     });
-    users.forEach(u => { state.userById[u.id] = u; });
   }
 
-  // Filtering and sorting
-  const fieldMap = {
-    student_name: l => {
-      const s = state.studentById[l.student_id];
-      return s ? `${s.first_name} ${s.last_name}` : 'Unknown';
-    },
-    action: l => l.action,
-    timestamp: l => l.timestamp
-  };
-  const filteredLogs = applyFiltersAndSort(logs, listFilters.attendance, fieldMap);
-  currentRenderedLogs = filteredLogs;
-
-  // Helper to render a single log
-  const renderLogItem = (log) => {
-    const student = state.studentById[log.student_id];
-    const performer = state.userById[log.performed_by];
-    const studentName = student ? `${student.first_name} ${student.last_name}` : 'Unknown';
-    const performedByName = performer ? `${performer.first_name ?? ''} ${performer.last_name ?? ''}`.trim() : 'Unknown';
-    const timestamp = new Date(log.timestamp).toLocaleString();
-    const action = log.action.toUpperCase();
-    const actionColor = action === 'IN' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-
-    return el('div', {
-      class: `${UI_CLASSES.attendanceFeedItem} grid grid-cols-2 gap-2 items-center py-2 md:grid-cols-5`,
-      html: `
-        <span class="${UI_CLASSES.studentName} font-semibold">${studentName}</span>
-        <span class="justify-self-start px-2 py-[0.5] rounded text-sm font-medium ${actionColor}">${action}</span>
-        <span class="text-sm text-gray-500">${timestamp}</span>
-        <span class="text-sm text-gray-600 italic">${performedByName}</span>
-        <button data-log-id="${log.id}" class="text-red-500 hover:underline text-sm hidden md:inline-block">Delete</button>
-      `
-    });
-  };
-
-  // Render all logs
-  const fragment = document.createDocumentFragment();
-  filteredLogs.forEach(log => fragment.appendChild(renderLogItem(log)));
-  feedContainer.innerHTML = '';
-  feedContainer.appendChild(fragment);
+  // initial load
+  reload();
 }
 
-/** Refresh feed and attach delete listener once */
-export async function refreshAttendanceFeed() {
-  await renderAttendanceFeed();
-  if (!feedContainer || _deleteListenerAttached) return;
-  _deleteListenerAttached = true;
+/**
+ * Create attendance logs for one or more students.
+ *
+ * @param {Object} opts
+ * @param {Array<string|Object>} opts.students Array of student ids OR student objects {id, firstName, lastName}
+ * @param {'in'|'out'} opts.action
+ * @param {string|Object} opts.performedBy user id or user object {id, firstName, lastName}
+ * @returns {Promise<{success:boolean, result:any}>}
+ */
+export async function createLog({ students = [], action, performedBy }) {
 
-  feedContainer.addEventListener('click', async ev => {
-    const btn = ev.target.closest && ev.target.closest('button[data-log-id]');
-    if (!btn) return;
-    const logId = btn.dataset.logId;
-    if (!logId) return;
+  if (!students || students.length === 0) return { success: true, result: null };
 
-    if (!confirm('Are you sure you want to delete this attendance log?')) return;
+  const performerId = (typeof performedBy === 'object' && performedBy !== null) ? (performedBy.id || performedBy.userId) : performedBy;
+  const ts = new Date().toISOString();
 
-    try {
-      await attendanceAPI.deleteLog(logId);
-      await renderAttendanceFeed();
-    } catch (err) {
-      console.error('Failed to delete log', err);
-      alert('Failed to delete log. See console for details.');
+  const rows = students.map(s => {
+    const studentId = (typeof s === 'object') ? (s.id || s.studentId) : s;
+    return {
+      student_id: studentId,
+      action,
+      timestamp: ts,
+      performed_by: performerId
+    };
+  });
+
+  const { data, error } = await insertAttendanceLogs(rows);
+  if (error) {
+    console.error('Failed to create attendance logs:', error);
+    return { success: false, result: error };
+  }
+  return { success: true, result: data };
+}
+
+/**
+ * Public function to (re)load and render logs into the DOM.
+ * Separated so other modules can call it when needed.
+ *
+ * @param {Object} opts
+ * @param {string} [opts.sort] same values as the sort select (e.g. 'timestamp-desc')
+ * @param {string|null} [opts.start] ISO date (or yyyy-mm-dd)
+ * @param {string|null} [opts.end] ISO date (or yyyy-mm-dd)
+ * @param {HTMLElement|null} [opts.container] DOM element to render into (falls back to #attendance-logs-container)
+ */
+export async function loadAndRenderAttendanceLogs({ sort, start = null, end = null, container = null } = {}) {
+  const cont = container || document.getElementById('attendance-logs-container');
+  if (!cont) {
+    console.warn('Attendance logs container not found (#attendance-logs-container)');
+    return;
+  }
+
+  const logs = await fetchAttendanceLogs({
+    columns: '*, students(first_name,last_name), users(first_name,last_name)',
+    start,
+    end,
+    sort: sort || 'timestamp-desc'
+  });
+
+  renderAttendanceList(logs, cont);
+}
+
+
+
+/**
+ * Renders an array of attendance log rows into the provided container.
+ * Each row rendered like your users list: top-level row, left name+action, right timestamp+performedBy,
+ * and <hr> between rows.
+ *
+ * Expected row shape (common possibilities):
+ * - r.students: { first_name, last_name }
+ * - r.users: { first_name, last_name }
+ * - r.student_first_name / r.student_last_name
+ * - r.timestamp or r._timestampISO
+ * - r.action
+ */
+function renderAttendanceList(list, containerElem) {
+  containerElem.innerHTML = '';
+
+  if (!list || list.length === 0) {
+    const emptyMessage = document.createElement('div');
+    emptyMessage.textContent = 'No attendance logs found.';
+    emptyMessage.className = UI_CLASSES.emptyMessage;
+    containerElem.appendChild(emptyMessage);
+    return;
+  }
+
+  list.forEach((r, index) => {
+    const row = document.createElement('div');
+    row.className = UI_CLASSES.attendanceListRow;
+
+    const nameAndAction = document.createElement('div');
+    nameAndAction.className = UI_CLASSES.listNameRoleGradeActionWrapper;
+
+    const name = document.createElement('div');
+    name.textContent = formatNameFromRow(r);
+    name.className = UI_CLASSES.listName;
+
+    const action = document.createElement('div');
+    action.className = UI_CLASSES.attendanceListActionWrapper;
+
+    const actionPill = document.createElement('span');
+    if (r.action.toString() === 'in') {
+      actionPill.className = `${UI_CLASSES.attendanceListActionPill} bg-green-100 text-green-700`;
+    } else {
+      actionPill.className = `${UI_CLASSES.attendanceListActionPill} bg-red-100 text-red-700`;
+    }
+    actionPill.textContent = (r.action).toString().toUpperCase();
+
+    const childrenAndActions = document.createElement('div');
+    childrenAndActions.className = UI_CLASSES.listChildrenParentsActionsWrapper;
+
+    const timestampWrapper = document.createElement('div');
+    const tsISO = r.timestamp;
+    timestampWrapper.textContent = new Date(tsISO).toLocaleString();
+    timestampWrapper.className = UI_CLASSES.attendanceListTimestamp;
+
+    const performedByWrapper = document.createElement('div');
+    performedByWrapper.className = UI_CLASSES.attendanceListPerformedBy;
+    performedByWrapper.textContent = formatPerformerFromRow(r);
+
+    // assemble
+    action.appendChild(actionPill);
+    nameAndAction.appendChild(name);
+    nameAndAction.appendChild(action);
+    childrenAndActions.appendChild(timestampWrapper);
+    childrenAndActions.appendChild(performedByWrapper);
+
+    row.appendChild(nameAndAction);
+    row.appendChild(childrenAndActions);
+
+    containerElem.appendChild(row);
+
+    // separator
+    if (index !== list.length - 1) {
+      const hr = document.createElement('hr');
+      hr.className = UI_CLASSES.listHr;
+      containerElem.appendChild(hr);
     }
   });
 }
 
-/** ============================
-       CSV Export
-============================ */
-function csvEscape(v) {
-  return `"${String(v ?? '').replace(/"/g, '""')}"`;
+/* ---------- small helpers ---------- */
+
+function formatNameFromRow(r) {
+  if (r.students && (r.students.last_name || r.students.first_name)) {
+    const last = r.students.last_name || '';
+    const first = r.students.first_name || '';
+    return `${last}${first ? ', ' + first : ''}`.trim();
+  }
+  if (r.student_last_name || r.student_first_name) {
+    return `${r.student_last_name || ''}${r.student_first_name ? ', ' + r.student_first_name : ''}`.trim();
+  }
+  if (r.student_name) return r.student_name;
+  return r.student_id || 'Unknown';
 }
 
-/** Download currently rendered logs as CSV */
-export function downloadCurrentAttendanceCsv() {
-  const rows = currentRenderedLogs || [];
-  if (!rows.length) {
-    alert('No logs available to export.');
-    return;
+function formatPerformerFromRow(r) {
+  if (r.users && (r.users.last_name || r.users.first_name)) {
+    const last = r.users.last_name || '';
+    const first = r.users.first_name || '';
+    return `${last}${first ? ', ' + first : ''}`.trim();
   }
+  if (r.performed_by_name) return r.performed_by_name;
+  if (r.performed_by) return r.performed_by;
+  return '—';
+}
 
-  const headers = ['Name', 'Action', 'Timestamp', 'Performed By'];
-  const lines = [headers.map(csvEscape).join(',')];
+function downloadCSV(logs) {
+  if (!logs || logs.length === 0) return;
 
-  rows.forEach(l => {
-    const s = state.studentById[l.student_id];
-    const studentName = s ? `${s.first_name} ${s.last_name}` : 'Unknown';
-    const u = state.userById[l.performed_by];
-    const performerName = u ? `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() : 'Unknown';
-    const ts = new Date(l.timestamp).toLocaleString();
-    lines.push([studentName, l.action, ts, performerName].map(csvEscape).join(','));
+  const rows = [['Last Name', 'First Name', 'Action', 'Timestamp (local)', 'Performed By Last Name', 'Performed By First Name']];
+
+  logs.forEach(r => {
+    const lastName = r.students.last_name;
+    const firstName = r.students.first_name;
+    const tsISO = r.timestamp;
+    const tsLocal = tsISO ? new Date(tsISO).toLocaleString() : '';
+    const performerLastName = r.users.last_name;
+    const performerFirstName = r.users.first_name;
+    rows.push([lastName, firstName, r.action, tsLocal, performerLastName, performerFirstName]);
   });
 
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const csv = rows.map(r => r.map(cell => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const s = listFilters.attendance.startDate || 'all';
-  const e = listFilters.attendance.endDate || 'all';
-  a.download = `attendance_${s}_${e}.csv`;
+  a.href = url;
+  a.download = `attendance-logs-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(a.href);
-}
-
-/** Download compressed in/out CSV */
-export function downloadCompressedAttendanceCsv(graceMinutes = 0) {
-  const logs = currentRenderedLogs || [];
-  if (!logs.length) {
-    alert("No logs available to export.");
-    return;
-  }
-
-  // Helper: format student name
-  const getStudentName = id => {
-    const s = state.studentById[id];
-    return s ? `${s.first_name} ${s.last_name}` : 'Unknown';
-  };
-
-  // Helper: calculate billable hours
-  const calcBillableHours = (start, end, grace = 5) => {
-    if (!end) return "Error";
-    const s = new Date(start);
-    const e = new Date(end);
-    if (isNaN(s) || isNaN(e) || e <= s) return "Error";
-
-    // Anchor to half-hour blocks
-    const startBlock = new Date(s);
-    startBlock.setMinutes(s.getMinutes() < 30 ? 30 : 30, 0, 0);
-    if (s.getMinutes() < 30) startBlock.setHours(startBlock.getHours() - 1);
-    startBlock.setMinutes(startBlock.getMinutes() + grace);
-
-    const endBlock = new Date(e);
-    endBlock.setMinutes(e.getMinutes() > 30 ? 30 : 30, 0, 0);
-    if (e.getMinutes() <= 30) endBlock.setHours(endBlock.getHours());
-    else endBlock.setHours(endBlock.getHours() + 1);
-    endBlock.setMinutes(endBlock.getMinutes() - grace);
-
-    let hours = 0;
-    let cursor = new Date(startBlock);
-    while (cursor <= endBlock) {
-      hours++;
-      cursor.setHours(cursor.getHours() + 1);
-    }
-    return hours;
-  };
-
-  // Group logs by student
-  const grouped = logs.reduce((acc, log) => {
-    if (!acc[log.student_id]) acc[log.student_id] = [];
-    acc[log.student_id].push(log);
-    return acc;
-  }, {});
-
-  // Build compressed in/out pairs
-  const compressed = Object.entries(grouped).flatMap(([studentId, entries]) => {
-    entries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    let inTime = null;
-    const pairs = [];
-
-    for (const e of entries) {
-      if (e.action === 'in') inTime = new Date(e.timestamp);
-      else if (e.action === 'out' && inTime) {
-        pairs.push({ student_name: getStudentName(studentId), in: inTime, out: new Date(e.timestamp) });
-        inTime = null;
-      }
-    }
-
-    // Handle student never checked out
-    if (inTime) pairs.push({ student_name: getStudentName(studentId), in: inTime, out: null });
-    return pairs;
-  });
-
-  // Build CSV
-  const headers = ["Name", "In Timestamp", "Out Timestamp", "Hours"];
-  const rows = compressed.map(c => [
-    c.student_name,
-    c.in.toLocaleString(),
-    c.out ? c.out.toLocaleString() : "",
-    calcBillableHours(c.in, c.out, graceMinutes)
-  ]);
-
-  const csvContent = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = el("a", { href: url, download: 'attendance_compressed.csv' });
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
   URL.revokeObjectURL(url);
-}
-
-/** ============================
-       Bulk Cleanup
-============================ */
-export async function bulkCleanupAttendance(cutoffDate) {
-  if (!cutoffDate) {
-    alert("Please select a cutoff date.");
-    return;
-  }
-
-  // Fetch logs strictly before or on the cutoff
-  const { data: logs = [] } = await attendanceAPI.getLogs({ endDate: cutoffDate });
-  if (!logs.length) {
-    alert(`No logs to delete up to and including ${cutoffDate}.`);
-    return;
-  }
-
-  // Offer export before deletion
-  if (confirm(`There are ${logs.length} logs up to and including ${cutoffDate}. Export them before deleting?`)) {
-    const previousLogs = currentRenderedLogs;
-    currentRenderedLogs = logs;
-    try {
-      downloadCurrentAttendanceCsv();
-    } finally {
-      currentRenderedLogs = previousLogs;
-    }
-  }
-
-  // Confirm deletion
-  if (!confirm(`Delete ${logs.length} logs up to and including ${cutoffDate}? This cannot be undone.`)) return;
-
-  try {
-    await attendanceAPI.deleteLogsBefore(cutoffDate);
-    await refreshAttendanceFeed();
-    alert('Logs deleted successfully.');
-  } catch (err) {
-    console.error('Bulk cleanup failed', err);
-    alert('Failed to delete logs. See console for details.');
-  }
-}
-
-/** ============================
-       Event Handlers
-============================ */
-export function handleDownloadCompressed() {
-  downloadCompressedAttendanceCsv(5);
-}
-
-export async function handleBulkCleanup() {
-  const cutoff = els.bulkDeleteLogsDate?.value;
-  await bulkCleanupAttendance(cutoff);
 }

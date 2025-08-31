@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Users</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" src="app.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          borderRadius: {
+            '4xl': '2rem',
+            '5xl': '2.5rem'
+          }
+        }
+      }
+    }
+  </script>
+
+</head>
+
+<body class="mx-auto max-w-7xl bg-gray-50">
+
+  <section id="user-management" class="w-full">
+    <div id="user-management-card" class="space-y-2 rounded-5xl bg-white p-4 shadow-md transition-transform">
+      <div class="flex items-center justify-between">
+        <h2 class="ml-4 text-2xl font-bold">Users</h2>
+        <button id="add-user-button"
+          class="flex justify-center items-center gap-2 rounded-3xl h-12 w-12 bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors md:w-auto md:px-4">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" class="w-5 h-5 text-white stroke-3">
+            <path fill="currentColor"
+              d="M352 128C352 110.3 337.7 96 320 96C302.3 96 288 110.3 288 128L288 288L128 288C110.3 288 96 302.3 96 320C96 337.7 110.3 352 128 352L288 352L288 512C288 529.7 302.3 544 320 544C337.7 544 352 529.7 352 512L352 352L512 352C529.7 352 544 337.7 544 320C544 302.3 529.7 288 512 288L352 288L352 128z" />
+          </svg>
+          <span class="hidden sm:inline">Add User</span>
+        </button>
+      </div>
+      <div class="flex items-center gap-2 mb-2">
+        <label for="user-sort" class="ml-4 text-sm font-medium">Sort by:</label>
+        <select id="user-sort"
+          class="h-8 appearance-none rounded-2xl pl-3 pr-2 bg-white shadow border-none outline-none hover:cursor-pointer hover:shadow-md">
+          <option value="firstName-asc">First Name ↑</option>
+          <option value="firstName-desc">First Name ↓</option>
+          <option value="lastName-asc" selected>Last Name ↑</option>
+          <option value="lastName-desc">Last Name ↓</option>
+          <option value="role-asc">Role ↑</option>
+          <option value="role-desc">Role ↓</option>
+          <option value="children-yes">Has Children</option>
+          <option value="children-no">No Children</option>
+        </select>
+      </div>
+      <div id="users-container" class="max-h-96 overflow-y-auto">
+      </div>
+    </div>
+  </section>
+
+  <section id="user-modal" class="hidden">
+    <div id="user-modal-overlay" class="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
+      <div class="mx-4 w-full max-w-2xl rounded-5xl bg-white p-4 shadow-md">
+        <h3 id="user-modal-title" class="mb-4 ml-2 text-xl font-semibold">Add User</h3>
+
+        <form id="user-form" class="flex flex-col gap-4">
+          <div class="grid grid-cols-1 gap-8 pt-4 md:grid-cols-2">
+
+            <!-- Last Name -->
+            <div class="relative">
+              <label for="user-last-name"
+                class="absolute left-5 -top-px -translate-y-1/2 rounded-full bg-white px-2 font-medium">
+                Last Name
+              </label>
+              <input type="text" id="user-last-name" name="last_name" required placeholder="e.g. 'Doe'"
+                class="h-12 w-full rounded-3xl px-6 text-lg border-2 border-gray-200 outline-none focus:border-emerald-600" />
+            </div>
+
+            <!-- First Name -->
+            <div class="relative">
+              <label for="user-first-name"
+                class="absolute left-5 -top-px -translate-y-1/2 rounded-full bg-white px-2 font-medium">
+                First Name
+              </label>
+              <input type="text" id="user-first-name" name="first_name" required placeholder="e.g. 'John'"
+                class="h-12 w-full rounded-3xl px-6 text-lg border-2 border-gray-200 outline-none focus:border-emerald-600" />
+            </div>
+
+            <!-- Role -->
+            <div class="relative">
+              <label for="user-role"
+                class="absolute left-5 -top-px -translate-y-1/2 rounded-full bg-white px-2 font-medium">
+                Role
+              </label>
+              <div
+                class="pointer-events-none absolute top-[2px] right-[2px] flex h-11 w-11 items-center justify-center rounded-full bg-white">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" class="h-6 w-6">
+                  <path fill="currentColor"
+                    d="M297.4 438.6C309.9 451.1 330.2 451.1 342.7 438.6L502.7 278.6C515.2 266.1 515.2 245.8 502.7 233.3C490.2 220.8 469.9 220.8 457.4 233.3L320 370.7L182.6 233.4C170.1 220.9 149.8 220.9 137.3 233.4C124.8 245.9 124.8 266.2 137.3 278.7L297.3 438.7z" />
+                </svg>
+              </div>
+              <select id="user-role" name="role" required
+                class="h-12 w-full appearance-none rounded-3xl bg-white px-6 text-lg border-2 border-gray-200 outline-none focus:border-emerald-600">
+                <option value="" disabled selected>- Select role -</option>
+                <option value="admin">Admin</option>
+                <option value="teacher">Teacher</option>
+                <option value="parent">Parent</option>
+              </select>
+            </div>
+
+            <!-- PIN -->
+            <div class="relative">
+              <label for="user-pin"
+                class="absolute left-5 -top-px -translate-y-1/2 rounded-full bg-white px-2 font-medium">
+                PIN
+              </label>
+              <input type="text" id="user-pin" name="pin" minlength="4" maxlength="4" pattern="\d*" inputmode="numeric"
+                required placeholder="e.g. '1234'"
+                class="h-12 w-full rounded-3xl px-6 text-lg border-2 border-gray-200 outline-none focus:border-emerald-600" />
+            </div>
+
+            <!-- Children Picker -->
+            <div class="relative col-span-1 md:col-span-2">
+
+              <!-- Input and Pill Wrapper -->
+              <div id="user-children-wrapper"
+                class="relative mt-2 flex flex-wrap items-center gap-2 rounded-3xl border-x-2 border-t-2 border-b-2 border-gray-200 px-2 py-1 min-h-12 transition-[border-radius] has-[:focus]:border-emerald-600">
+                <label for="user-children-input"
+                  class="absolute left-5 -top-[3px] -translate-y-1/2 rounded-full bg-white px-2 font-medium">
+                  Children
+                </label>
+                <!-- Pill Wrapper -->
+                <div id="user-children-selected" class="flex items-center gap-2 pl-[1px]"></div>
+
+                <!-- Search Input -->
+                <input id="user-children-input" type="text" autocomplete="off"
+                  placeholder="Start typing to search students..."
+                  class="flex-1 min-w-40 bg-transparent outline-none text-lg px-2 py-1" />
+              </div>
+
+              <!-- Dropdown with search results -->
+              <div id="user-children-dropdown"
+                class="absolute left-0 right-0 z-50 hidden bg-white max-h-64 overflow-auto rounded-b-3xl border-x-2 border-b-2 border-emerald-600">
+                <ul id="user-children-dropdown-list" class="divide-y">
+                  <!-- Options injected by JS -->
+                </ul>
+              </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="col-span-1 flex gap-8 md:col-span-2">
+              <button type="button" id="user-cancel-button"
+                class="flex items-center justify-center gap-2 h-12 w-full rounded-3xl bg-gray-200 px-4 py-2 font-medium hover:bg-gray-300">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" class="h-5 w-5 stroke-2">
+                  <path fill="currentColor"
+                    d="M183.1 137.4C170.6 124.9 150.3 124.9 137.8 137.4C125.3 149.9 125.3 170.2 137.8 182.7L275.2 320L137.9 457.4C125.4 469.9 125.4 490.2 137.9 502.7C150.4 515.2 170.7 515.2 183.2 502.7L320.5 365.3L457.9 502.6C470.4 515.1 490.7 515.1 503.2 502.6C515.7 490.1 515.7 469.8 503.2 457.3L365.8 320L503.1 182.6C515.6 170.1 515.6 149.8 503.1 137.3C490.6 124.8 470.3 124.8 457.8 137.3L320.5 274.7L183.1 137.4z" />
+                </svg>
+                Cancel</button>
+              <button type="button" id="user-save-button"
+                class="flex items-center justify-center gap-2 h-12 w-full rounded-3xl bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" class="h-5 w-5 stroke-2 text-white">
+                  <path fill="currentColor"
+                    d="M530.8 134.1C545.1 144.5 548.3 164.5 537.9 178.8L281.9 530.8C276.4 538.4 267.9 543.1 258.5 543.9C249.1 544.7 240 541.2 233.4 534.6L105.4 406.6C92.9 394.1 92.9 373.8 105.4 361.3C117.9 348.8 138.2 348.8 150.7 361.3L252.2 462.8L486.2 141.1C496.6 126.8 516.6 123.6 530.9 134z" />
+                </svg>
+                Save</button>
+            </div>
+
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+</body>
+
+</html>

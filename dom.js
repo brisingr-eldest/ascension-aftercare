@@ -1,86 +1,93 @@
+// Helpers
 /**
- * @param {elementId} id
+ * Shorthand for `document.getElementById`.
+ *
+ * @function $
+ * @param {string} id The element ID to look up.
+ * @returns {HTMLElement | null} The matching element, or `null` if not found.
  */
 export const $ = id => document.getElementById(id);
 
-/** ============================
-       Cached Elements
-============================ */
+/**
+ * Shorthand for `document.querySelectorAll`.
+ *
+ * @function $$
+ * @param {string} selector A valid CSS selector string.
+ * @returns {NodeListOf<HTMLElement>} A live NodeList of all matching elements.
+ */
+export const $$ = selector => document.querySelectorAll(selector);
+
+/**
+ * Clears all child content from a container element.
+*
+* This sets the container's `innerHTML` to an empty string, effectively removing all child nodes.
+*
+ * @function clearContainer
+ * @param {HTMLElement} container - The DOM element to be cleared.
+ * @returns {void}
+ */
+export function clearContainer(container) {
+  container.innerHTML = '';
+}
+
 export const els = {
-  // Login screen
+  // Login
+  loginScreen: $('login-screen'),
+  loginError: $('login-error'),
   loginForm: $('login-form'),
   pinInput: $('pin-input'),
-  loginError: $('login-error'),
-
-  // Main screen
   mainScreen: $('main-screen'),
-  loginScreen: $('login-screen'),
+  adminSection: $('admin-section'),
+
+  // Role
   userRoleDisplay: $('user-role-display'),
-  logoutButton: $('logout-button'),
 
-  // Headings
-  usersHeading: $('users-heading'),
-  studentsHeading: $('students-heading'),
-  attendanceHeading: $('attendance-heading'),
+  // Checkin/Checkout
+  checkInCard: $('checked-out'),
+  checkOutCard: $('checked-in'),
+  checkedInContainer: $('checked-in-container'),
+  checkedOutContainer: $('checked-out-container'),
+  checkOutButton: $('check-out-button'),
+  checkInButton: $('check-in-button'),
 
-  // Check-in / Check-out
-  checkInList: $('check-in-list'),
-  checkOutList: $('check-out-list'),
-  checkInMsg: $('check-in-message'),
-  checkOutMsg: $('check-out-message'),
-  submitCheckIn: $('submit-check-in'),
-  submitCheckOut: $('submit-check-out'),
 
-  // Users
-  addUserButton: $('add-user-button'),
+  // User Management
   usersContainer: $('users-container'),
-  userModal: $('user-modal'),
-  userForm: $('user-form'),
-  userCancelButton: $('user-cancel-button'),
-  userModalTitle: $('user-modal-title'),
+  usersAddButton: $('add-user-button'),
+  usersSort: $('user-sort'),
 
-  // Students
-  addStudentButton: $('add-student-button'),
-  studentsContainer: $('students-container'),
-  studentModal: $('student-modal'),
-  studentForm: $('student-form'),
-  studentCancelButton: $('student-cancel-button'),
-  studentModalTitle: $('student-modal-title'),
+  usersModal: $('user-modal'),
+  usersModalOverlay: $('user-modal-overlay'),
+  usersModalTitle: $('user-modal-title'),
+  usersForm: $('user-form'),
+  usersFormPickerWrapper: $('user-children-wrapper'),
+  usersFormPickerSelected: $('user-children-selected'),
+  usersFormPickerInput: $('user-children-input'),
+  usersFormPickerDropdown: $('user-children-dropdown'),
+  usersFormPickerDropdownList: $('user-children-dropdown-list'),
+  usersFormCancelButton: $('user-cancel-button'),
+  usersFormSaveButton: $('user-save-button'),
 
-  // Student picker
-  studentPicker: $('student-picker'),
-  studentPickerInput: $('student-picker-input'),
-  studentSuggestions: $('student-suggestions'),
 
-  // Attendance logs
-  attendanceWrapper: $('attendance-wrapper'),
-  attendanceFilters: $('attendance-filters'),
-  attendanceSearch: $('attendance-search'),
-  attendanceStart: $('attendance-start-date'),
-  attendanceEnd: $('attendance-end-date'),
-  attendanceAction: $('attendance-action'),
-  downloadRaw: $('download-raw'),
-  downloadCompressed: $('download-compressed'),
-  bulkDeleteWrapper: $('attendance-bulk-delete-wrapper'),
-  bulkDeleteLogsBtn: $('attendance-bulk-delete'),
-  bulkDeleteLogsDate: $('attendance-bulk-delete-date'),
+  // Student Roster
+  studentsContainer: $('student-container'),
+  studentsSort: $('student-sort'),
+  studentsAddButton: $('add-student-button'),
 
-  // Sorts
-  usersSort: $('users-sort'),
-  studentsSort: $('students-sort'),
+  studentsModal: $('student-modal'),
+  studentsModalOverlay: $('student-modal-overlay'),
+  studentsForm: $('student-form'),
+  studentsFormCancelButton: $('student-cancel-button'),
+  studentsFormSaveButton: $('student-save-button'),
+  studentsModalTitle: $('student-modal-title'),
+
+  attendanceContainer: $('attendance-logs-container'),
+  attendanceSort: $('attendance-logs-sort'),
+  attendanceStart: $('attendance-logs-start'),
+  attendanceEnd: $('attendance-logs-end'),
+  attendanceDownload: $('download-logs-button'),
+  attendanceDangerZone: $('danger-zone'),
+  attendanceDeleteButton: $('delete-logs-button'),
+
+
 };
-
-/** ============================
-        Element Creator
-============================ */
-export function el(tag, props = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, val] of Object.entries(props || {})) {
-    if (key === 'class') node.className = val;
-    else if (key === 'text') node.textContent = val;
-    else if (key === 'html') node.innerHTML = val;
-    else node.setAttribute(key, val);
-  }
-  for (const c of children) if (c != null) node.append(typeof c === 'string' ? document.createTextNode(c) : c);
-  return node;
-}

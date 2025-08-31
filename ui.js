@@ -1,159 +1,70 @@
-import { UI_CLASSES } from './config.js';
-import { el } from './dom.js';
-import { openEditStudentModal, openEditUserModal } from './modals.js';
-import { deleteRecords } from './api.js';
-import { loadUsersCards } from './loaders.js';
-import { refreshAdminViews } from './refresh.js';
+export const UI_CLASSES = {
+  // Checkin/Checkout
+  checkIOListRow: 'flex items-center h-12 py-3 pl-1 cursor-pointer rounded-3xl text-base space-x-2 select-none transition-colors duration-150 hover:bg-gray-100',
+  checkIOHiddenCheckbox: 'hidden peer',
+  checkIOSVGWrapper: [
+    'relative flex-shrink-0 w-6 h-6',
+    'flex items-center justify-center',
+    'rounded-full border border-gray-300',
+    'shadow-sm',
+    'transition-all duration-150',
+    'hover:border-gray-600',
+    'peer-checked:bg-emerald-600 peer-checked:border-emerald-600',
+    '[&svg]:opacity-0 [&svg]:scale-75 [&svg]:transition-all [&svg]:duration-200',
+    'peer-checked:[&svg]:opacity-100 peer-checked:[&svg]:scale-100'
+  ].join(' '),
+  checkIOSVGCheckbox: 'w-4 h-4 text-white stroke-3',
+  checkIOStudentName: 'text-lg font-medium',
 
-/* ============================
-       Generic UI Helpers
-   ============================ */
-export function createActionButton(label, className, onClick) {
-  const btn = el('button', { class: className, text: label });
-  if (typeof onClick === 'function') btn.addEventListener('click', onClick);
-  return btn;
+  // User Management
+  usersFormPickerDropdownList: 'p-2',
+  usersFormPickerDropdownListItem: 'flex items-center justify-between px-3 py-2 rounded-full cursor-pointer hover:bg-gray-100',
+  usersFormPickerDropdownListItemEnterIcon: 'text-sm text-gray-400',
+  usersFormPickerSelectedRemoveButton: 'ml-1 text-gray-600',
+
+  // Attendance Logs
+  attendanceListRow: 'group flex flex-col gap-y-4 justify-between px-4 py-2 rounded-3xl transition-colors duration-150 md:flex-row md:hover:bg-gray-100',
+  attendanceListActionWrapper: 'flex justify-end w-1/3 md:justify-center',
+  attendanceListActionPill: 'min-w-12 rounded-full py-1 text-sm text-center',
+  attendanceListTimestamp: 'w-1/2',
+  attendanceListPerformedBy: 'flex justify-end self-end w-1/2 before:content-["By:"] before:mr-1 before:font-medium md:self-center md:before:content-[""]',
+
+  // Generic
+  listRow: 'group flex flex-col gap-y-4 justify-between p-2 pl-4 rounded-3xl transition-colors duration-150 md:flex-row md:hover:bg-gray-100',
+  listNameRoleGradeActionWrapper: 'flex justify-between items-center w-full md:w-1/3',
+  listName: 'w-full text-lg font-medium',
+  listRoleGrade: 'w-1/3 italic text-right text-gray-500 md:text-left',
+  listChildrenParentsActionsWrapper: 'flex justify-between items-center w-full md:w-2/3',
+  listChildrenParentsWrapper: 'flex justify-start gap-2 flex-wrap w-full',
+  listActionsWrapper: 'flex gap-2 self-end',
+  listActionsButtonIcon: 'w-5 h-5 stroke-3',
+  listActionButton: 'flex items-center justify-center w-full h-8 px-3 gap-2 rounded-2xl transition-all duration-150 hover:bg-gray-200 lg:opacity-0 lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:pointer-events-auto',
+
+  emptyMessage: 'p-3 italic',
+  relationPill: 'px-2 py-1 text-sm rounded-full bg-gray-100 transition-colors duration-150 group-hover:bg-gray-200',
+  listHr: 'm-0 p-0 md:hidden'
+};
+
+
+// UI Helper functions
+/**
+ * Makes a DOM element visible by removing the Tailwind `hidden` class.
+ *
+ * @function show
+ * @param {HTMLElement} element The element to show.
+ * @returns {void}
+ */
+export function show(element) {
+  element.classList.remove('hidden');
 }
 
-/* Create a basic card skeleton with content & actions containers */
-export function createCardBase(baseKey, titleText) {
-  const card = el('div', { class: `${UI_CLASSES[baseKey]} ${UI_CLASSES.tableCard ?? ''}` });
-  const titleDiv = el('div', { class: UI_CLASSES.cardTableName || '', text: titleText || '' });
-  card.appendChild(titleDiv);
-
-  const contentContainer = el('div', { class: UI_CLASSES.cardContent || UI_CLASSES.cardTableItem || '' });
-  card.appendChild(contentContainer);
-
-  const actionsContainer = el('div', { class: UI_CLASSES.actionsContainer || '' });
-  card.appendChild(actionsContainer);
-
-  return { card, contentContainer, actionsContainer };
+/**
+ * Makes a DOM element invisible by adding the Tailwind `hidden` class.
+ *
+ * @function hide
+ * @param {HTMLElement} element The element to hide.
+ * @returns {void}
+ */
+export function hide(element) {
+  element.classList.add('hidden');
 }
-
-/* Render pills for relations (parents/children) */
-export function renderRelations(container, prefixText, items = [], renderLabel) {
-  container.appendChild(el('span', { class: UI_CLASSES.cardTablePrefix || '', text: prefixText }));
-
-  if (!items || items.length === 0) {
-    container.appendChild(el('span', { text: '—' }));
-    return;
-  }
-
-  items.forEach(it => {
-    const label = typeof renderLabel === 'function' ? renderLabel(it) : String(it);
-    const pill = el('span', { class: UI_CLASSES.pill || '', text: label });
-    container.appendChild(pill);
-  });
-}
-
-/* Generic card creation for any entity (user/student) */
-export function createEntityCard({ entity, title = '', contentRows = [], relations = [], onEdit, onDelete, cardKey }) {
-  const { card, contentContainer, actionsContainer } = createCardBase(cardKey, title);
-
-  // Add content rows
-  contentRows.forEach(r => {
-    contentContainer.appendChild(
-      el('div', { class: UI_CLASSES.cardTableItem || '', text: `${r.label}: ${r.value ?? '—'}` })
-    );
-  });
-
-  // Add relations
-  relations.forEach(r => {
-    const relContainer = el('div', { class: UI_CLASSES.relationContainer || '' });
-    renderRelations(relContainer, r.prefix, r.items, r.renderLabel);
-    contentContainer.appendChild(relContainer);
-  });
-
-  // Add actions
-  if (onEdit) actionsContainer.appendChild(
-    createActionButton('Edit', `${UI_CLASSES.editAction} ${UI_CLASSES.actionLink}`.trim(), onEdit)
-  );
-  if (onDelete) actionsContainer.appendChild(
-    createActionButton('Delete', `${UI_CLASSES.deleteAction} ${UI_CLASSES.actionLink}`.trim(), onDelete)
-  );
-
-  return card;
-}
-
-/* ============================
-       User / Student Cards
-   ============================ */
-export function createUserCard(user) {
-  return createEntityCard({
-    entity: user,
-    title: `${user.last_name}, ${user.first_name}`,
-    contentRows: [{ label: 'Role', value: user.role }],
-    relations: [{
-      prefix: 'Child(ren):',
-      items: (user.students_parents || []).map(sp => sp.student || {}),
-      renderLabel: s => `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim()
-    }],
-    onEdit: () => openEditUserModal(user),
-    onDelete: async () => {
-      if (!confirm(`Are you sure you want to permanently delete ${user.first_name} ${user.last_name}? This cannot be undone.`)) return;
-      const { error } = await deleteRecords('users', { id: user.id });
-      if (!error) await loadUsersCards();
-    },
-    cardKey: 'userCard'
-  });
-}
-
-export function createStudentCard(student) {
-  const fullName = `${student.last_name || ''}${student.first_name ? ', ' + student.first_name : ''}`.trim();
-  return createEntityCard({
-    entity: student,
-    title: fullName,
-    contentRows: [{ label: 'Grade', value: student.grade }],
-    relations: [{
-      prefix: 'Parent(s):',
-      items: (student.students_parents || []).map(sp => sp.parent || {}),
-      renderLabel: p => p.name || 'Unknown'
-    }],
-    onEdit: () => openEditStudentModal(student),
-    onDelete: async () => {
-      if (!confirm(`Permanently delete ${student.first_name} ${student.last_name}? This cannot be undone.`)) return;
-      const { error: relErr } = await deleteRecords('students_parents', { student_id: student.id });
-      if (relErr) { alert('Failed to remove student links. See console.'); console.error(relErr); return; }
-      const { error } = await deleteRecords('students', { id: student.id });
-      if (error) { alert('Failed to delete student. See console.'); console.error(error); return; }
-      await refreshAdminViews();
-    },
-    cardKey: 'studentCard'
-  });
-}
-
-/* ============================
-       Student List Items
-   ============================ */
-export function createStudentListItem(student) {
-  const item = el('label', { class: UI_CLASSES.studentListItem || 'flex items-center space-x-3 p-3 cursor-pointer text-base' });
-
-  const checkbox = el('input', { type: 'checkbox', value: student.id });
-  checkbox.className = UI_CLASSES.checkboxInput;
-
-  const box = el('span', { class: UI_CLASSES.checkboxBox });
-  box.innerHTML = `
-    <svg class="${UI_CLASSES.checkboxIcon}" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-      <polyline points="20 6 9 17 4 12"></polyline>
-    </svg>
-  `;
-
-  const nameSpan = el('span', { class: UI_CLASSES.studentName || 'text-sm', text: `${student.last_name}, ${student.first_name}` });
-
-  item.appendChild(checkbox);
-  item.appendChild(box);
-  item.appendChild(nameSpan);
-
-  return item;
-}
-
-export function setEmptyMessage(container, msg) {
-  container.innerHTML = '';
-  container.textContent = msg;
-}
-/** ============================
-        Show/Hide Helpers
-============================ */
-
-export const show = el => el?.classList.remove('hidden');
-export const hide = el => el?.classList.add('hidden');
