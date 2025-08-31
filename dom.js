@@ -60,6 +60,8 @@ export const els = {
   usersModalOverlay: $('user-modal-overlay'),
   usersModalTitle: $('user-modal-title'),
   usersForm: $('user-form'),
+  usersFormPin: $('user-pin'),
+  usersFormPinValidation: $('pin-validation-message'),
   usersFormPickerWrapper: $('user-children-wrapper'),
   usersFormPickerSelected: $('user-children-selected'),
   usersFormPickerInput: $('user-children-input'),

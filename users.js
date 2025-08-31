@@ -1,4 +1,4 @@
-import { fetchRelations, fetchStudents, fetchUsers, insertUser, updateUser, getRelationsForParent, addRelations, removeRelations, deleteUser } from "./api.js";
+import { fetchRelations, fetchStudents, fetchUsers, insertUser, updateUser, getRelationsForParent, addRelations, removeRelations, deleteUser, getUserByPin } from "./api.js";
 import { clearContainer, els } from "./dom.js";
 import { UI_CLASSES } from "./ui.js";
 import { state } from "./state.js";
@@ -7,6 +7,13 @@ import { renderStudents } from "./students.js";
 let selectedChildren = [];
 let dropdownVisible = false;
 let editingUser = null
+
+let pinValidationTimer = null;
+let pinIsValid = true;
+const PIN_LENGTH = 4;
+let _checkPinNow = null;
+let _resetPinValidation = null;
+
 
 state.studentsSort = {
   field: 'lastName',
@@ -41,6 +48,7 @@ export async function initUsers() {
   els.usersFormSaveButton.addEventListener('click', saveUser);
 
   setupChildrenPicker();
+  setupPinValidation();
 }
 
 export async function renderUsers() {
@@ -317,6 +325,27 @@ async function saveUser() {
     pin: form['pin'].value.trim(),
   };
 
+  const pinValue = (form['pin'].value || '').trim();
+  if (pinValue.length === PIN_LENGTH && /^\d+$/.test(pinValue)) {
+    const excludeId = editingUser && editingUser.id ? editingUser.id : null;
+    const { user: conflict, error } = await getUserByPin(pinValue, excludeId);
+    if (error) {
+      console.error('Pin check failed on save', error);
+      // optionally continue (or abort). Here we abort to be safe.
+      window.alert('Unable to validate PIN right now. Try again.');
+      return;
+    }
+    if (conflict) {
+      // show message and abort submit
+      if (els.usersFormPinValidation) {
+        els.usersFormPinValidation.textContent = 'PIN already in use.';
+        els.usersFormPinValidation.classList.remove('hidden');
+      }
+      return;
+    }
+  }
+
+
   // save logic differs for create vs update
   if (editingUser) {
     // UPDATE flow
@@ -406,12 +435,15 @@ function openUserModal() {
   if (els.usersForm) els.usersForm.reset();
   selectedChildren = [];
   renderSelectedChildren();
+
+  // reset pin validation UI
+  if (typeof _resetPinValidation === 'function') _resetPinValidation();
+
   if (els.usersModal) els.usersModal.classList.remove('hidden');
 }
 
 function openUserModalForEdit(user) {
   editingUser = user;
-  // populate form
   if (els.usersForm) {
     els.usersForm['first_name'].value = user.firstName || '';
     els.usersForm['last_name'].value = user.lastName || '';
@@ -421,6 +453,10 @@ function openUserModalForEdit(user) {
 
   selectedChildren = (user.children || []).slice();
   renderSelectedChildren();
+
+  // reset then re-check the PIN (will ignore the user itself via excludeId)
+  if (typeof _resetPinValidation === 'function') _resetPinValidation();
+  if (typeof _checkPinNow === 'function') _checkPinNow(els.usersFormPin.value || '');
 
   setModalTitle('Edit User');
   if (els.usersModal) els.usersModal.classList.remove('hidden');
@@ -445,4 +481,79 @@ async function confirmAndDeleteUser(user) {
     state.users = state.users.filter(u => u.id !== user.id);
     renderUsers(state.users);
   }
+}
+
+function setupPinValidation() {
+  const pinInput = els.usersFormPin;
+  const messageBox = els.usersFormPinValidation;
+  const saveBtn = els.usersFormSaveButton;
+
+  if (!pinInput || !messageBox || !saveBtn) {
+    console.warn('Pin validation not wired: missing elements in els', { pinInput, messageBox, saveBtn });
+    return;
+  }
+
+  function setPinValidationState(ok, reason = '') {
+    pinIsValid = !!ok;
+    if (ok) {
+      messageBox.classList.add('hidden');
+      saveBtn.removeAttribute('disabled');
+    } else {
+      messageBox.textContent = reason || 'PIN already in use.';
+      messageBox.classList.remove('hidden');
+      saveBtn.setAttribute('disabled', 'disabled');
+    }
+  }
+
+  async function checkPinNow(pin) {
+    console.debug('checkPinNow running for pin:', pin);
+    // quick sanitization
+    if (!pin || pin.length !== PIN_LENGTH || !/^\d+$/.test(pin)) {
+      setPinValidationState(true);
+      return true;
+    }
+
+    const excludeId = editingUser && editingUser.id ? editingUser.id : null;
+    const { user, error } = await getUserByPin(pin, excludeId);
+
+    if (error) {
+      console.error('Pin check error', error);
+      // be conservative: allow until save-time check
+      setPinValidationState(true);
+      return true;
+    }
+
+    if (user) {
+      console.debug('pin in use by user:', user.id);
+      setPinValidationState(false, 'PIN already in use.');
+      return false;
+    } else {
+      setPinValidationState(true);
+      return true;
+    }
+  }
+
+  // wire events
+  pinInput.addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    const digits = v.replace(/\D/g, '').slice(0, PIN_LENGTH);
+    if (digits !== v) pinInput.value = digits;
+
+    if (pinValidationTimer) clearTimeout(pinValidationTimer);
+    pinValidationTimer = setTimeout(() => checkPinNow(digits), 250);
+  });
+
+  pinInput.addEventListener('blur', (e) => {
+    const v = e.target.value.trim();
+    if (pinValidationTimer) clearTimeout(pinValidationTimer);
+    checkPinNow(v);
+  });
+
+  // expose module-scoped helpers so other functions can call them:
+  _checkPinNow = checkPinNow;
+  _resetPinValidation = function resetPinValidation() {
+    setPinValidationState(true);
+    // leave value intact so editing keeps prefilled value; remove message
+    if (pinInput) pinInput.value = pinInput.value || '';
+  };
 }

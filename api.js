@@ -163,6 +163,30 @@ export async function deleteUser(userId) {
   return !error;
 }
 
+/**
+ * Find user rows using a pin. Optionally ignore a user id (useful when editing).
+ * @param {string} pin
+ * @param {string|null} excludeUserId
+ * @returns {Promise<{user: Object|null, error: any}>}
+ */
+export async function getUserByPin(pin, excludeUserId = null) {
+  if (!pin) return { user: null, error: null };
+
+  // base query
+  let query = supabase.from('users').select('*').eq('pin', pin);
+
+  // exclude current user when editing
+  if (excludeUserId) query = query.neq('id', excludeUserId);
+
+  const { data, error } = await query.limit(1);
+  if (error) {
+    console.error('getUserByPin error', error);
+    return { user: null, error };
+  }
+
+  return { user: (data && data[0]) ? data[0] : null, error: null };
+}
+
 /* ============================================================================
  * Relations (students ↔ parents)
  * ==========================================================================*/

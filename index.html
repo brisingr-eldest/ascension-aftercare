@@ -310,6 +310,8 @@
                     <label for="user-pin" class="floating-label">PIN</label>
                     <input type="text" id="user-pin" name="pin" minlength="4" maxlength="4" pattern="\d*"
                       inputmode="numeric" required placeholder="e.g. '1234'" class="input" />
+                    <div id="pin-validation-message" class="text-sm text-red-600 text-center hidden">PIN already in use.
+                    </div>
                   </div>
 
                   <div class="relative col-span-1 md:col-span-2">
