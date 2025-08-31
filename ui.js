@@ -31,9 +31,9 @@ export const UI_CLASSES = {
 
   // Generic
   listRow: 'group flex flex-col gap-y-4 justify-between p-2 pl-4 rounded-3xl transition-colors duration-150 md:flex-row md:hover:bg-gray-100',
-  listNameRoleGradeActionWrapper: 'flex justify-between items-center w-full md:w-1/3',
-  listName: 'w-full text-lg font-medium',
-  listRoleGrade: 'w-1/3 italic text-right text-gray-500 md:text-left',
+  listNameRoleGradeActionWrapper: 'flex justify-start items-center gap-4 w-full md:justify-between md:gap-0 md:w-1/3',
+  listName: 'w-fit text-lg font-medium md:w-full',
+  listRoleGrade: 'w-1/3 italic text-left text-gray-500',
   listChildrenParentsActionsWrapper: 'flex justify-between items-center w-full md:w-2/3',
   listChildrenParentsWrapper: 'flex justify-start gap-2 flex-wrap w-full',
   listActionsWrapper: 'flex gap-2 self-end',
