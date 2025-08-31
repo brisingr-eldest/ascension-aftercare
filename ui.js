@@ -41,7 +41,7 @@ export const UI_CLASSES = {
   listActionButton: 'flex items-center justify-center w-full h-8 px-3 gap-2 rounded-2xl transition-all duration-150 hover:bg-gray-200 lg:opacity-0 lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:pointer-events-auto',
 
   emptyMessage: 'p-3 italic',
-  relationPill: 'px-2 py-1 text-sm rounded-full bg-gray-100 transition-colors duration-150 group-hover:bg-gray-200',
+  relationPill: 'px-2 py-1 text-sm rounded-full bg-gray-100 truncate transition-colors duration-150 group-hover:bg-gray-200',
   listHr: 'm-0 p-0 md:hidden'
 };
 
