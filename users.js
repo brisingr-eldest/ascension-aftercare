@@ -5,6 +5,7 @@ import { state } from "./state.js";
 import { renderStudents } from "./students.js";
 
 let selectedChildren = [];
+let dropdownVisible = false;
 let editingUser = null
 
 state.studentsSort = {
